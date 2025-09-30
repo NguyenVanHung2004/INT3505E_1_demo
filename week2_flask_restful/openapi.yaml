@@ -14,12 +14,15 @@ paths:
       responses:
         "200":
           description: OK
+          headers:
+            Cache-Control:
+              description: "Chỉ thị cache (vd: public, max-age=60)"
+              schema: { type: string }
           content:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/Book"
+                items: { $ref: "#/components/schemas/Book" }
     post:
       summary: Tạo sách
       tags: [Books]
@@ -27,15 +30,55 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/BookCreate"
+            schema: { $ref: "#/components/schemas/BookCreate" }
       responses:
         "201":
           description: Sách đã tạo
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Book"
+              schema: { $ref: "#/components/schemas/Book" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /books/{book_id}:
+    get:
+      summary: Chi tiết sách
+      tags: [Books]
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Book" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Cập nhật sách
+      tags: [Books]
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookCreate" }
+      responses:
+        "200":
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Book" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Xoá sách
+      tags: [Books]
+      parameters:
+        - $ref: "#/components/parameters/BookId"
+      responses:
+        "204":
+          description: No Content
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /members:
     get:
@@ -48,8 +91,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/Member"
+                items: { $ref: "#/components/schemas/Member" }
     post:
       summary: Tạo thành viên
       tags: [Members]
@@ -57,32 +99,68 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/MemberCreate"
+            schema: { $ref: "#/components/schemas/MemberCreate" }
       responses:
         "201":
           description: Thành viên đã tạo
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Member"
+              schema: { $ref: "#/components/schemas/Member" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /members/{member_id}:
+    get:
+      summary: Chi tiết thành viên
+      tags: [Members]
+      parameters:
+        - $ref: "#/components/parameters/MemberId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      summary: Cập nhật thành viên
+      tags: [Members]
+      parameters:
+        - $ref: "#/components/parameters/MemberId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberCreate" }
+      responses:
+        "200":
+          description: Đã cập nhật
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      summary: Xoá thành viên
+      tags: [Members]
+      parameters:
+        - $ref: "#/components/parameters/MemberId"
+      responses:
+        "204":
+          description: No Content
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /members/{member_id}/details:
     get:
       summary: Thông tin 1 thành viên + danh sách loans
       tags: [Members]
       parameters:
-        - in: path
-          name: member_id
-          required: true
-          schema: { type: integer }
+        - $ref: "#/components/parameters/MemberId"
         - in: query
           name: status
-          required: false
-          schema:
-            type: string
-            enum: [active, returned, all]
-            default: active
+          schema: { type: string, enum: [active, returned, all], default: active }
+          description: Lọc theo trạng thái mượn
       responses:
         "200":
           description: OK
@@ -96,10 +174,26 @@ paths:
                   email: { type: string, example: "hung@example.com" }
                   loans:
                     type: array
-                    items:
-                      $ref: "#/components/schemas/LoanBrief"
-        "404":
-          description: Not found
+                    items: { $ref: "#/components/schemas/LoanBrief" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /loans:
+    get:
+      summary: Danh sách phiếu mượn (lọc theo trạng thái)
+      tags: [Loans]
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [active, returned], default: active }
+          description: Lọc loan theo trạng thái
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LoanExpanded" }
 
   /loans/borrow:
     post:
@@ -109,15 +203,15 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/BorrowRequest"
+            schema: { $ref: "#/components/schemas/BorrowRequest" }
       responses:
         "201":
           description: Phiếu mượn
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Loan"
+              schema: { $ref: "#/components/schemas/Loan" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /loans/return:
     post:
@@ -127,18 +221,52 @@ paths:
         required: true
         content:
           application/json:
-            schema:
-              $ref: "#/components/schemas/ReturnRequest"
+            schema: { $ref: "#/components/schemas/ReturnRequest" }
       responses:
         "200":
           description: Trả thành công
           content:
             application/json:
-              schema:
-                $ref: "#/components/schemas/Loan"
+              schema: { $ref: "#/components/schemas/Loan" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
 components:
+  parameters:
+    BookId:
+      in: path
+      name: book_id
+      required: true
+      schema: { type: integer }
+    MemberId:
+      in: path
+      name: member_id
+      required: true
+      schema: { type: integer }
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
   schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string, example: "Not found" }
+
     Book:
       type: object
       properties:
@@ -170,12 +298,24 @@ components:
     Loan:
       type: object
       properties:
-        id: { type: integer, example: 12 }
+        id: { type: integer, example: 12 }        # id của loan (server trả về)
         book_id: { type: integer, example: 3 }
         member_id: { type: integer, example: 1 }
         borrowed_at: { type: string, format: date-time, example: "2025-09-30T10:12:00Z" }
         due_at: { type: string, format: date-time, example: "2025-10-14T10:12:00Z" }
         returned_at: { type: string, format: date-time, nullable: true, example: null }
+
+    LoanExpanded:
+      type: object
+      properties:
+        id: { type: integer, example: 12 }
+        book_id: { type: integer, example: 3 }
+        book_title: { type: string, example: "Clean Code" }
+        member_id: { type: integer, example: 1 }
+        member_name: { type: string, example: "Nguyen Van Hung" }
+        borrowed_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        returned_at: { type: string, format: date-time, nullable: true }
 
     LoanBrief:
       type: object
@@ -183,9 +323,9 @@ components:
         loan_id: { type: integer, example: 12 }
         book_id: { type: integer, example: 3 }
         book_title: { type: string, example: "Clean Code" }
-        borrowed_at: { type: string, format: date-time, example: "2025-09-30T10:12:00Z" }
-        due_at: { type: string, format: date-time, example: "2025-10-14T10:12:00Z" }
-        returned_at: { type: string, format: date-time, nullable: true, example: null }
+        borrowed_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time }
+        returned_at: { type: string, format: date-time, nullable: true }
 
     BorrowRequest:
       type: object

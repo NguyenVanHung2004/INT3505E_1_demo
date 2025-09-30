@@ -3,7 +3,7 @@
 #pip install -r requirements.txt
 from datetime import datetime, timedelta
 from dateutil import tz
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger, swag_from
 from flask import send_from_directory
@@ -45,9 +45,10 @@ def now_iso():
 # --- Books ---
 @app.get("/books")
 def list_books():
-    return jsonify([{
-        "id": b.id, "title": b.title, "author": b.author, "stock": b.stock
-    } for b in Book.query.order_by(Book.id.desc()).all()])
+    books = [{"id": b.id, "title": b.title} for b in Book.query.all()]
+    resp = make_response(jsonify(books), 200)
+    resp.headers["Cache-Control"] = "public, max-age=60"
+    return resp
 
 @app.post("/books")
 def create_book():
