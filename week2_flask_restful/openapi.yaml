@@ -1,0 +1,202 @@
+openapi: 3.0.0
+info:
+  title: Library API
+  version: "1.0.0"
+  description: Quản lý sách, thành viên và mượn – trả
+servers:
+  - url: http://127.0.0.1:5000
+
+paths:
+  /books:
+    get:
+      summary: Danh sách sách
+      tags: [Books]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+    post:
+      summary: Tạo sách
+      tags: [Books]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookCreate"
+      responses:
+        "201":
+          description: Sách đã tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+
+  /members:
+    get:
+      summary: Danh sách thành viên
+      tags: [Members]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Member"
+    post:
+      summary: Tạo thành viên
+      tags: [Members]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberCreate"
+      responses:
+        "201":
+          description: Thành viên đã tạo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+
+  /members/{member_id}/details:
+    get:
+      summary: Thông tin 1 thành viên + danh sách loans
+      tags: [Members]
+      parameters:
+        - in: path
+          name: member_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [active, returned, all]
+            default: active
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, example: 1 }
+                  name: { type: string, example: "Nguyen Van Hung" }
+                  email: { type: string, example: "hung@example.com" }
+                  loans:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LoanBrief"
+        "404":
+          description: Not found
+
+  /loans/borrow:
+    post:
+      summary: Mượn sách
+      tags: [Loans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BorrowRequest"
+      responses:
+        "201":
+          description: Phiếu mượn
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Loan"
+
+  /loans/return:
+    post:
+      summary: Trả sách
+      tags: [Loans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReturnRequest"
+      responses:
+        "200":
+          description: Trả thành công
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Loan"
+
+components:
+  schemas:
+    Book:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        title: { type: string, example: "Clean Code" }
+        author: { type: string, example: "Robert C. Martin" }
+        stock: { type: integer, example: 3 }
+    BookCreate:
+      type: object
+      required: [title, author, stock]
+      properties:
+        title: { type: string, example: "Clean Code" }
+        author: { type: string, example: "Robert C. Martin" }
+        stock: { type: integer, example: 3 }
+
+    Member:
+      type: object
+      properties:
+        id: { type: integer, example: 1 }
+        name: { type: string, example: "Nguyen Van Hung" }
+        email: { type: string, example: "hung@example.com" }
+    MemberCreate:
+      type: object
+      required: [name, email]
+      properties:
+        name: { type: string, example: "Nguyen Van Hung" }
+        email: { type: string, example: "hung@example.com" }
+
+    Loan:
+      type: object
+      properties:
+        id: { type: integer, example: 12 }
+        book_id: { type: integer, example: 3 }
+        member_id: { type: integer, example: 1 }
+        borrowed_at: { type: string, format: date-time, example: "2025-09-30T10:12:00Z" }
+        due_at: { type: string, format: date-time, example: "2025-10-14T10:12:00Z" }
+        returned_at: { type: string, format: date-time, nullable: true, example: null }
+
+    LoanBrief:
+      type: object
+      properties:
+        loan_id: { type: integer, example: 12 }
+        book_id: { type: integer, example: 3 }
+        book_title: { type: string, example: "Clean Code" }
+        borrowed_at: { type: string, format: date-time, example: "2025-09-30T10:12:00Z" }
+        due_at: { type: string, format: date-time, example: "2025-10-14T10:12:00Z" }
+        returned_at: { type: string, format: date-time, nullable: true, example: null }
+
+    BorrowRequest:
+      type: object
+      required: [book_id, member_id]
+      properties:
+        book_id: { type: integer, example: 1 }
+        member_id: { type: integer, example: 1 }
+        days: { type: integer, example: 14 }
+
+    ReturnRequest:
+      type: object
+      required: [loan_id]
+      properties:
+        loan_id: { type: integer, example: 1 }
