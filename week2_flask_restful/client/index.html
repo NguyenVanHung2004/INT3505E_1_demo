@@ -1,0 +1,442 @@
+<!-- python -m http.server 3000 -->
+ <!-- server at http://127.0.0.1:3000/  -->
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Library Client SPA — Client–Server Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Simple toast animation */
+    .toast-enter { opacity: 0; transform: translateY(8px); }
+    .toast-enter-active { opacity: 1; transform: translateY(0); transition: all .25s ease; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="text-xl font-semibold">📚 Library Client (SPA)</div>
+      <div class="ml-auto flex items-center gap-2">
+        <label class="text-sm text-slate-600">API base</label>
+        <input id="apiBase" class="px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[280px]" value="http://127.0.0.1:5000" />
+        <label class="text-sm text-slate-600">Token</label>
+        <input id="apiToken" class="px-3 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
+       placeholder="demo-token-123" />
+        <button id="btnPing" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Test</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 pt-6 pb-24">
+    <!-- Tabs -->
+    <div class="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+      <button data-tab="books" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">Books</button>
+      <button data-tab="members" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Members</button>
+      <button data-tab="loans" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100">Loans</button>
+    </div>
+
+    <!-- Toasts -->
+    <div id="toasts" class="fixed right-4 bottom-4 flex flex-col gap-2 z-50"></div>
+
+    <!-- Panels -->
+    <section id="panel-books" class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100 flex items-center gap-2">
+            <h2 class="text-lg font-semibold">Book list</h2>
+            <button id="refreshBooks" class="ml-auto px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Refresh</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr>
+                  <th class="text-left px-4 py-2">ID</th>
+                  <th class="text-left px-4 py-2">Title</th>
+                  <th class="text-left px-4 py-2">Author</th>
+                  <th class="text-left px-4 py-2">Stock</th>
+                  <th class="text-left px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="booksBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100">
+            <h3 class="text-base font-semibold" id="bookFormTitle">Create book</h3>
+          </div>
+          <form id="bookForm" class="p-4 space-y-3">
+            <input type="hidden" id="bookId" />
+            <div>
+              <label class="block text-sm text-slate-600">Title</label>
+              <input id="bookTitle" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600">Author</label>
+              <input id="bookAuthor" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600">Stock</label>
+              <input id="bookStock" type="number" min="0" value="1" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div class="flex gap-2">
+              <button class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700" type="submit">Save</button>
+              <button id="bookReset" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50" type="button">Reset</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-members" class="mt-6 hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100 flex items-center gap-2">
+            <h2 class="text-lg font-semibold">Member list</h2>
+            <button id="refreshMembers" class="ml-auto px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Refresh</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr>
+                  <th class="text-left px-4 py-2">ID</th>
+                  <th class="text-left px-4 py-2">Name</th>
+                  <th class="text-left px-4 py-2">Email</th>
+                  <th class="text-left px-4 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="membersBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100">
+            <h3 class="text-base font-semibold" id="memberFormTitle">Create member</h3>
+          </div>
+          <form id="memberForm" class="p-4 space-y-3">
+            <input type="hidden" id="memberId" />
+            <div>
+              <label class="block text-sm text-slate-600">Name</label>
+              <input id="memberName" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600">Email</label>
+              <input id="memberEmail" type="email" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+            </div>
+            <div class="flex gap-2">
+              <button class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700" type="submit">Save</button>
+              <button id="memberReset" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50" type="button">Reset</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-loans" class="mt-6 hidden grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100 flex items-center gap-2">
+            <h2 class="text-lg font-semibold">Active loans</h2>
+            <button id="refreshLoans" class="ml-auto px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50">Refresh</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50">
+                <tr>
+                  <th class="text-left px-4 py-2">ID</th>
+                  <th class="text-left px-4 py-2">Book</th>
+                  <th class="text-left px-4 py-2">Member</th>
+                  <th class="text-left px-4 py-2">Borrowed</th>
+                  <th class="text-left px-4 py-2">Due</th>
+                  <th class="text-left px-4 py-2">Action</th>
+                </tr>
+              </thead>
+              <tbody id="loansBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100">
+            <h3 class="text-base font-semibold">Member details</h3>
+          </div>
+          <div class="p-4 space-y-3">
+            <div class="flex gap-2 flex-wrap items-end">
+              <div>
+                <label class="block text-sm text-slate-600">Member ID</label>
+                <input id="detailMemberId" type="number" min="1" class="px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 w-40" />
+              </div>
+              <div>
+                <label class="block text-sm text-slate-600">Status</label>
+                <select id="detailStatus" class="px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="active">active</option>
+                  <option value="returned">returned</option>
+                  <option value="all">all</option>
+                </select>
+              </div>
+              <button id="btnLoadDetails" class="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-900">Load</button>
+            </div>
+            <pre id="memberDetails" class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs overflow-auto max-h-64"></pre>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="bg-white border border-slate-200 rounded-2xl shadow-sm">
+          <div class="p-4 border-b border-slate-100">
+            <h3 class="text-base font-semibold">Borrow a book</h3>
+          </div>
+          <form id="borrowForm" class="p-4 space-y-3">
+            <div>
+              <label class="block text-sm text-slate-600">Member</label>
+              <select id="borrowMember" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600">Book (stock &gt; 0)</label>
+              <select id="borrowBook" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600">Days</label>
+              <input id="borrowDays" type="number" min="1" value="14" class="w-full px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <button class="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700" type="submit">Borrow</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    function toast(msg, type = 'info') {
+      const host = $('#toasts');
+      const el = document.createElement('div');
+      el.className = `toast-enter toast-enter-active px-4 py-2 rounded-xl shadow-md border text-sm ${type==='error'?'bg-red-50 border-red-200 text-red-800':'bg-emerald-50 border-emerald-200 text-emerald-800'}`;
+      el.textContent = msg;
+      host.appendChild(el);
+      setTimeout(() => { el.classList.remove('toast-enter'); }, 0);
+      setTimeout(() => { el.remove(); }, 3000);
+    }
+
+    function apiBase() { return $('#apiBase').value.replace(/\/$/, ''); }
+    function apiToken() { return $('#apiToken').value.trim(); }
+
+    async function api(path, opts = {}) {
+        const headers = { 'Content-Type': 'application/json', ...(opts.headers||{}) };
+        const token = apiToken();
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const res = await fetch(apiBase() + path, { ...opts, headers });
+        const text = await res.text();
+        let data; try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+        if (!res.ok) throw { status: res.status, data };
+        return data;
+    }
+    // Tabs
+    $$(".tab-btn").forEach(btn => btn.addEventListener('click', () => {
+      $$(".tab-btn").forEach(b => { b.classList.remove('bg-blue-600','text-white'); b.classList.add('text-slate-700'); });
+      btn.classList.add('bg-blue-600','text-white');
+      const tab = btn.getAttribute('data-tab');
+      $('#panel-books').classList.toggle('hidden', tab !== 'books');
+      $('#panel-members').classList.toggle('hidden', tab !== 'members');
+      $('#panel-loans').classList.toggle('hidden', tab !== 'loans');
+    }));
+
+    // Ping
+    $('#btnPing').addEventListener('click', async () => {
+      try {
+        await api('/books');
+        toast('Connected to API ✅');
+      } catch (e) {
+        toast('Cannot connect to API ❌', 'error');
+      }
+    });
+
+    // -------- Books --------
+    async function loadBooks() {
+      const rows = await api('/books');
+      const body = $('#booksBody');
+      body.innerHTML = '';
+      rows.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="px-4 py-2">${b.id}</td>
+          <td class="px-4 py-2">${b.title}</td>
+          <td class="px-4 py-2">${b.author}</td>
+          <td class="px-4 py-2">${b.stock}</td>
+          <td class="px-4 py-2 flex gap-2">
+            <button class="px-2 py-1 rounded-lg border hover:bg-slate-50" data-action="edit">Edit</button>
+            <button class="px-2 py-1 rounded-lg border hover:bg-slate-50" data-action="delete">Delete</button>
+          </td>`;
+        tr.querySelector('[data-action="edit"]').addEventListener('click', () => fillBookForm(b));
+        tr.querySelector('[data-action="delete"]').addEventListener('click', () => deleteBook(b.id));
+        body.appendChild(tr);
+      });
+      // refresh borrow options too
+      loadBorrowOptions();
+    }
+
+    function fillBookForm(b){
+      $('#bookFormTitle').textContent = 'Edit book';
+      $('#bookId').value = b.id;
+      $('#bookTitle').value = b.title;
+      $('#bookAuthor').value = b.author;
+      $('#bookStock').value = b.stock;
+    }
+
+    async function deleteBook(id){
+      if(!confirm('Delete this book?')) return;
+      try { await api(`/books/${id}`, { method: 'DELETE' }); toast('Book deleted'); loadBooks(); }
+      catch(e){ toast(e.data?.error||'Delete failed', 'error'); }
+    }
+
+    $('#bookForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const id = $('#bookId').value;
+      const payload = {
+        title: $('#bookTitle').value.trim(),
+        author: $('#bookAuthor').value.trim(),
+        stock: Number($('#bookStock').value||0),
+      };
+      try {
+        if (id) { await api(`/books/${id}`, { method: 'PUT', body: JSON.stringify(payload) }); toast('Book updated ✅'); }
+        else { await api('/books', { method: 'POST', body: JSON.stringify(payload) }); toast('Book created ✅'); }
+        $('#bookForm').reset(); $('#bookFormTitle').textContent = 'Create book';
+        loadBooks();
+      } catch(e){ toast(e.data?.error||'Save failed', 'error'); }
+    });
+    $('#bookReset').addEventListener('click', () => { $('#bookForm').reset(); $('#bookFormTitle').textContent='Create book'; });
+    $('#refreshBooks').addEventListener('click', loadBooks);
+
+    // -------- Members --------
+    async function loadMembers() {
+      const rows = await api('/members');
+      const body = $('#membersBody');
+      body.innerHTML = '';
+      rows.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="px-4 py-2">${m.id}</td>
+          <td class="px-4 py-2">${m.name}</td>
+          <td class="px-4 py-2">${m.email}</td>
+          <td class="px-4 py-2 flex gap-2">
+            <button class="px-2 py-1 rounded-lg border hover:bg-slate-50" data-action="edit">Edit</button>
+            <button class="px-2 py-1 rounded-lg border hover:bg-slate-50" data-action="delete">Delete</button>
+          </td>`;
+        tr.querySelector('[data-action="edit"]').addEventListener('click', () => fillMemberForm(m));
+        tr.querySelector('[data-action="delete"]').addEventListener('click', () => deleteMember(m.id));
+        body.appendChild(tr);
+      });
+      // refresh borrow options too
+      loadBorrowOptions();
+    }
+
+    function fillMemberForm(m){
+      $('#memberFormTitle').textContent = 'Edit member';
+      $('#memberId').value = m.id;
+      $('#memberName').value = m.name;
+      $('#memberEmail').value = m.email;
+    }
+
+    async function deleteMember(id){
+      if(!confirm('Delete this member?')) return;
+      try { await api(`/members/${id}`, { method: 'DELETE' }); toast('Member deleted'); loadMembers(); }
+      catch(e){ toast(e.data?.error||'Delete failed', 'error'); }
+    }
+
+    $('#memberForm').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const id = $('#memberId').value;
+      const payload = {
+        name: $('#memberName').value.trim(),
+        email: $('#memberEmail').value.trim(),
+      };
+      try {
+        if (id) { await api(`/members/${id}`, { method: 'PUT', body: JSON.stringify(payload) }); toast('Member updated ✅'); }
+        else { await api('/members', { method: 'POST', body: JSON.stringify(payload) }); toast('Member created ✅'); }
+        $('#memberForm').reset(); $('#memberFormTitle').textContent = 'Create member';
+        loadMembers();
+      } catch(e){ toast(e.data?.error||'Save failed', 'error'); }
+    });
+    $('#memberReset').addEventListener('click', () => { $('#memberForm').reset(); $('#memberFormTitle').textContent='Create member'; });
+    $('#refreshMembers').addEventListener('click', loadMembers);
+
+    // -------- Loans --------
+    async function loadLoans() {
+      const rows = await api('/loans?status=active');
+      const body = $('#loansBody');
+      body.innerHTML = '';
+      rows.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="px-4 py-2">${l.id}</td>
+          <td class="px-4 py-2">${l.book_title} (#${l.book_id})</td>
+          <td class="px-4 py-2">${l.member_name} (#${l.member_id})</td>
+          <td class="px-4 py-2">${l.borrowed_at}</td>
+          <td class="px-4 py-2">${l.due_at}</td>
+          <td class="px-4 py-2">
+            <button class="px-2 py-1 rounded-lg border hover:bg-slate-50" data-action="return">Return</button>
+          </td>`;
+        tr.querySelector('[data-action="return"]').addEventListener('click', () => returnLoan(l.id));
+        body.appendChild(tr);
+      });
+    }
+
+    async function returnLoan(loanId){
+      if(!confirm('Mark this loan as returned?')) return;
+      try { await api('/loans/return', { method: 'POST', body: JSON.stringify({ loan_id: loanId }) }); toast('Returned ✅'); loadLoans(); loadBooks(); }
+      catch(e){ toast(e.data?.error||'Return failed', 'error'); }
+    }
+
+    async function loadBorrowOptions(){
+      const members = await api('/members');
+      const books = await api('/books');
+      const mSel = $('#borrowMember');
+      const bSel = $('#borrowBook');
+      mSel.innerHTML = members.map(m=>`<option value="${m.id}">${m.name} (#${m.id})</option>`).join('');
+      bSel.innerHTML = books.filter(b=>b.stock>0).map(b=>`<option value="${b.id}">${b.title} — stock ${b.stock}</option>`).join('');
+    }
+
+    $('#borrowForm').addEventListener('submit', async (ev)=>{
+      ev.preventDefault();
+      const payload = {
+        member_id: Number($('#borrowMember').value),
+        book_id: Number($('#borrowBook').value),
+        days: Number($('#borrowDays').value||14),
+      };
+      try {
+        await api('/loans/borrow', { method: 'POST', body: JSON.stringify(payload) });
+        toast('Borrowed ✅');
+        loadLoans(); loadBooks(); loadBorrowOptions();
+      } catch(e){ toast(e.data?.error||'Borrow failed', 'error'); }
+    });
+
+    // Member details
+    $('#btnLoadDetails').addEventListener('click', async ()=>{
+      const id = $('#detailMemberId').value;
+      const status = $('#detailStatus').value;
+      if(!id){ toast('Please enter member id', 'error'); return; }
+      try {
+        const data = await api(`/members/${id}/details?status=${encodeURIComponent(status)}`);
+        $('#memberDetails').textContent = JSON.stringify(data, null, 2);
+      } catch(e){ $('#memberDetails').textContent = JSON.stringify(e.data||{error:'Failed'}, null, 2); }
+    });
+
+    // Initial load
+    (async function init(){
+      try {
+        await Promise.all([loadBooks(), loadMembers()]);
+        await Promise.all([loadLoans(), loadBorrowOptions()]);
+        toast('Ready ✅');
+      } catch(e){ toast('Init failed — check API base URL', 'error'); }
+    })();
+  </script>
+</body>
+</html>

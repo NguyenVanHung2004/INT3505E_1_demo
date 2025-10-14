@@ -1,24 +1,20 @@
-#python -m venv .venv
-#.venv\Scripts\activate
-#pip install -r requirements.txt
-#python app.py
-# api at: http://127.0.0.1:5000/docs
+# cacheable_demo.py
 from datetime import datetime, timedelta
+import hashlib, json
 from dateutil import tz
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, make_response, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
-from flasgger import Swagger, swag_from
-from flask import send_from_directory
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
+
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///library.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-# --- Models ---
+# ===== Models =====
 class Book(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String, nullable=False)
@@ -44,16 +40,46 @@ class Loan(db.Model):
 with app.app_context():
     db.create_all()
 
+# ===== Helpers =====
+def _json_bytes(obj) -> bytes:
+    # Chuẩn hoá serialization để hash ổn định (không phụ thuộc spacing, order)
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False, sort_keys=True).encode("utf-8")
+
+def _etag_of(obj) -> str:
+    return hashlib.sha256(_json_bytes(obj)).hexdigest()
+
+def json_cache(obj, status=200, max_age=120):
+    """
+    Trả JSON có kèm Cache-Control và ETag.
+    Nếu If-None-Match khớp -> 304.
+    """
+    payload = obj  # dict/list
+    etag = _etag_of(payload)
+    inm = request.headers.get("If-None-Match")
+
+    if inm and inm == etag:
+        resp = make_response("", 304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+        return resp
+
+    raw = _json_bytes(payload)
+    resp = make_response(raw, status)
+    resp.headers["Content-Type"] = "application/json; charset=utf-8"
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = f"public, max-age={max_age}"
+    return resp
+
 def now_iso():
     return datetime.now(tz.UTC).isoformat()
 
-# --- Books ---
+# ===== Books =====
 @app.get("/books")
 def list_books():
-    books = [{"id": b.id, "title": b.title} for b in Book.query.all()]
-    resp = make_response(jsonify(books), 200)
-    resp.headers["Cache-Control"] = "public, max-age=60"
-    return resp
+    items = [{"id": b.id, "title": b.title, "author": b.author, "stock": b.stock}
+             for b in Book.query.order_by(Book.id).all()]
+    # Danh sách thường cache ngắn hơn
+    return json_cache({"items": items, "count": len(items)}, max_age=60)
 
 @app.post("/books")
 def create_book():
@@ -62,13 +88,14 @@ def create_book():
         if f not in data: return jsonify({"error": f"{f} required"}), 400
     b = Book(title=data["title"], author=data["author"], stock=int(data["stock"]))
     db.session.add(b); db.session.commit()
+    # Không cache response ghi/PUT/POST
     return jsonify({"id": b.id, "title": b.title, "author": b.author, "stock": b.stock}), 201
 
 @app.get("/books/<int:book_id>")
 def get_book(book_id):
     b = Book.query.get(book_id)
     if not b: return jsonify({"error":"Not found"}), 404
-    return jsonify({"id": b.id, "title": b.title, "author": b.author, "stock": b.stock})
+    return json_cache({"id": b.id, "title": b.title, "author": b.author, "stock": b.stock}, max_age=300)
 
 @app.put("/books/<int:book_id>")
 def update_book(book_id):
@@ -88,10 +115,12 @@ def delete_book(book_id):
     db.session.delete(b); db.session.commit()
     return "", 204
 
-# --- Members ---
+# ===== Members =====
 @app.get("/members")
 def list_members():
-    return jsonify([{"id": m.id, "name": m.name, "email": m.email} for m in Member.query.order_by(Member.id.desc()).all()])
+    items = [{"id": m.id, "name": m.name, "email": m.email}
+             for m in Member.query.order_by(Member.id.desc()).all()]
+    return json_cache({"items": items, "count": len(items)}, max_age=90)
 
 @app.post("/members")
 def create_member():
@@ -108,7 +137,7 @@ def create_member():
 def get_member(member_id):
     m = Member.query.get(member_id)
     if not m: return jsonify({"error":"Not found"}), 404
-    return jsonify({"id": m.id, "name": m.name, "email": m.email})
+    return json_cache({"id": m.id, "name": m.name, "email": m.email}, max_age=300)
 
 @app.put("/members/<int:member_id>")
 def update_member(member_id):
@@ -130,38 +159,7 @@ def delete_member(member_id):
     db.session.delete(m); db.session.commit()
     return "", 204
 
-@app.get("/members/<int:member_id>/details")
-def member_details(member_id):
-    status = request.args.get("status", "active")  # active | returned | all
-
-    m = Member.query.get(member_id)
-    if not m:
-        return jsonify({"error": "Not found"}), 404
-
-    q = Loan.query.filter(Loan.member_id == member_id).join(Book)
-    if status == "active":
-        q = q.filter(Loan.returned_at.is_(None))
-    elif status == "returned":
-        q = q.filter(Loan.returned_at.isnot(None))
-    # else "all" -> không lọc
-
-    loans = q.order_by(Loan.id.desc()).all()
-
-    return jsonify({
-        "id": m.id,
-        "name": m.name,
-        "email": m.email,
-        "loans": [{
-            "loan_id": l.id,
-            "book_id": l.book_id,
-            "book_title": l.book.title,
-            "borrowed_at": l.borrowed_at,
-            "due_at": l.due_at,
-            "returned_at": l.returned_at
-        } for l in loans]
-    })
-
-# --- Loans ---
+# ===== Loans =====
 @app.get("/loans")
 def list_loans():
     status = request.args.get("status","active")
@@ -170,15 +168,16 @@ def list_loans():
         q = q.filter(Loan.returned_at.isnot(None))
     else:
         q = q.filter(Loan.returned_at.is_(None))
-    loans = q.order_by(Loan.id.desc()).all()
-    return jsonify([{
+    items = [{
         "id": l.id,
         "book_id": l.book_id, "book_title": l.book.title,
         "member_id": l.member_id, "member_name": l.member.name,
         "borrowed_at": l.borrowed_at, "due_at": l.due_at, "returned_at": l.returned_at
-    } for l in loans])
+    } for l in q.order_by(Loan.id.desc()).all()]
+    # Active loans đổi liên tục -> max_age ngắn
+    return json_cache({"items": items, "count": len(items)}, max_age=15)
 
-@app.post("/loans/borrow")
+@app.post("/loans")
 def borrow():
     data = request.get_json() or {}
     book_id, member_id = data.get("book_id"), data.get("member_id")
@@ -188,61 +187,44 @@ def borrow():
 
     b = Book.query.get(book_id)
     if not b: return jsonify({"error": "Book not found"}), 404
-    if b.stock <= 0: return jsonify({"error": "Out of stock"}), 400
+    if b.stock <= 0: return jsonify({"error": "Out of stock"}), 409
     m = Member.query.get(member_id)
     if not m: return jsonify({"error": "Member not found"}), 404
 
-    now = datetime.utcnow()
-    due = now + timedelta(days=days)
-
+    now = datetime.utcnow(); due = now + timedelta(days=days)
     b.stock -= 1
     l = Loan(book_id=book_id, member_id=member_id,
              borrowed_at=now.isoformat()+"Z", due_at=due.isoformat()+"Z")
     db.session.add(l); db.session.commit()
-    return jsonify({"id": l.id, "book_id": l.book_id, "member_id": l.member_id,
-                    "borrowed_at": l.borrowed_at, "due_at": l.due_at, "returned_at": l.returned_at}), 201
+    return jsonify({
+        "id": l.id, "book_id": l.book_id, "member_id": l.member_id,
+        "borrowed_at": l.borrowed_at, "due_at": l.due_at, "returned_at": l.returned_at
+    }), 201
 
-@app.post("/loans/return")
-def return_loan():
-    data = request.get_json() or {}
-    loan_id = data.get("loan_id")
-    if not loan_id: return jsonify({"error":"loan_id required"}), 400
+@app.patch("/loans/<int:loan_id>")
+def return_loan(loan_id):
     l = Loan.query.get(loan_id)
     if not l: return jsonify({"error":"Loan not found"}), 404
-    if l.returned_at: return jsonify({"error":"Already returned"}), 400
-
-    l.returned_at = datetime.utcnow().isoformat()+"Z"
-    b = Book.query.get(l.book_id)
-    b.stock += 1
-    db.session.commit()
+    data = request.get_json() or {}
+    if data.get("returned") is True:
+        if l.returned_at: return jsonify({"error":"Already returned"}), 409
+        l.returned_at = datetime.utcnow().isoformat()+"Z"
+        b = Book.query.get(l.book_id); b.stock += 1
+        db.session.commit()
     return jsonify({
         "id": l.id, "book_id": l.book_id, "member_id": l.member_id,
         "borrowed_at": l.borrowed_at, "due_at": l.due_at, "returned_at": l.returned_at
     })
 
+# ===== Docs (tùy chọn) =====
 @app.get("/openapi.yaml")
 def openapi_yaml():
     return send_from_directory(".", "openapi.yaml", mimetype="text/yaml")
 
-@app.get("/redoc")
-def redoc():
-    return """
-    <!doctype html>
-    <html>
-      <head><title>Library API Docs</title></head>
-      <body>
-        <redoc spec-url='/openapi.yaml'></redoc>
-        <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
-      </body>
-    </html>
-    """
-SWAGGER_URL = "/docs"          # nơi mở UI
-API_URL = "/openapi.yaml"      # file OpenAPI của bạn
-swaggerui_bp = get_swaggerui_blueprint(
-    SWAGGER_URL,
-    API_URL,
-    config={"app_name": "Library API"}  # optional
-)
+SWAGGER_URL = "/docs"
+API_URL = "/openapi.yaml"
+swaggerui_bp = get_swaggerui_blueprint(SWAGGER_URL, API_URL, config={"app_name": "Library API"})
 app.register_blueprint(swaggerui_bp, url_prefix=SWAGGER_URL)
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
