@@ -10,6 +10,8 @@ from flask_sqlalchemy import SQLAlchemy
 from flasgger import Swagger, swag_from
 from flask import send_from_directory
 
+from flask_swagger_ui import get_swaggerui_blueprint
+
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///library.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -221,7 +223,7 @@ def return_loan():
 def openapi_yaml():
     return send_from_directory(".", "openapi.yaml", mimetype="text/yaml")
 
-@app.get("/docs")
+@app.get("/redoc")
 def redoc():
     return """
     <!doctype html>
@@ -233,6 +235,13 @@ def redoc():
       </body>
     </html>
     """
-
+SWAGGER_URL = "/docs"          # nơi mở UI
+API_URL = "/openapi.yaml"      # file OpenAPI của bạn
+swaggerui_bp = get_swaggerui_blueprint(
+    SWAGGER_URL,
+    API_URL,
+    config={"app_name": "Library API"}  # optional
+)
+app.register_blueprint(swaggerui_bp, url_prefix=SWAGGER_URL)
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
