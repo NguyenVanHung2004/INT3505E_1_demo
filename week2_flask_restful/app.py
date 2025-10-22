@@ -53,7 +53,11 @@ def list_books():
     books = [{"id": b.id, "title": b.title} for b in Book.query.all()]
     resp = make_response(jsonify(books), 200)
     resp.headers["Cache-Control"] = "public, max-age=60"
-    return resp
+    return jsonify({
+    "status": "success",
+    "data": books,
+    "count": len(books)
+}), 200
 
 @app.post("/books")
 def create_book():
