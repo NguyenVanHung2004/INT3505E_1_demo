@@ -316,6 +316,16 @@ app.delete('/api/v1/loans/:id', requireAuth, requireRoles('admin'), async (req, 
   await l.destroy();
   res.json({ message: 'ok' });
 });
+// === DEV ONLY: promote user to admin ===
+app.post('/dev/promote', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ message: 'email required' });
+  const user = await User.findOne({ where: { email: email.toLowerCase() }, include: Role });
+  if (!user) return res.status(404).json({ message: 'user not found' });
+  const [adminRole] = await Role.findOrCreate({ where: { name: 'admin' }, defaults: { name: 'admin' }});
+  await user.addRole(adminRole);
+  return res.json({ message: 'promoted', user: user.id });
+});
 
 // -----------------------------
 // Bootstrap & seed
