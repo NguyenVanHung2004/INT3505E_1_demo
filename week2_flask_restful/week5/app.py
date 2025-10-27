@@ -7,7 +7,7 @@
 #GET /api/v1/books?page=2&per_page=20&sort=title&order=asc
 #GET /api/v1/members?pagination=offset&offset=40&limit=20
 #GET /api/v1/loans?pagination=cursor&first=10
-# GET /api/v1/loans?pagination=cursor&first=10&after=eyJsYXN0X2lkIjogMTAwfQ==
+#GET /api/v1/loans?pagination=cursor&first=10&after=eyJsYXN0X2lkIjogMTAwfQ==
 from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, make_response, Blueprint, send_from_directory
 from flask_sqlalchemy import SQLAlchemy

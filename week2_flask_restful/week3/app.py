@@ -103,7 +103,7 @@ with app.app_context():
 # API v1 Blueprint (Versioning)
 # -----------------------------
 api = Blueprint("api_v1", __name__, url_prefix="/api/v1")
-
+api_v2 = Blueprint("api_v2", __name__, url_prefix="/api/v2")
 # --- Health check (hyphen, clarity)
 @api.get("/health-check")
 def health_check():
@@ -139,6 +139,10 @@ def list_books():
     meta = {"page": page, "per_page": per_page, "total": items.total, "pages": items.pages}
     return envelope(data=data, meta=meta, cache_max_age=30)
 
+@api_v2.get("/books")
+def list_books_v2():
+    # có thể thay đổi schema, filter, hoặc thêm field mới
+    return envelope(data={"books": "new format"})
 @api.post("/books")
 def create_book():
     payload = request.get_json() or {}
@@ -429,6 +433,8 @@ app.register_blueprint(swaggerui_bp, url_prefix=SWAGGER_URL)
 
 # Mount API v1
 app.register_blueprint(api)
+app.register_blueprint(api_v2)
+
 
 # -----------------------------
 # Error Handlers (Clarity)
