@@ -54,7 +54,12 @@ const Member = sequelize.define('Member', {
 });
 
 const Loan = sequelize.define('Loan', {
-  loan_date: { type: DataTypes.DATE, defaultValue: Sequelize.fn('datetime','now') },
+  // dùng CURRENT_TIMESTAMP để tránh lỗi cú pháp SQLite
+  loan_date: { 
+    type: DataTypes.DATE, 
+    allowNull: false, 
+    defaultValue: Sequelize.literal('CURRENT_TIMESTAMP') 
+  },
   return_date: { type: DataTypes.DATE, allowNull: true }
 });
 Loan.belongsTo(Book, { foreignKey: { allowNull: false } });
