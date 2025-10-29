@@ -4,15 +4,12 @@
 # python app.py
 # Docs: http://127.0.0.1:5000/docs  (OpenAPI v1 ở /openapi.yaml)
 
-#GET /api/v1/books?page=2&per_page=20&sort=title&order=asc
-#GET /api/v1/members?pagination=offset&offset=40&limit=20
-#GET /api/v1/loans?pagination=cursor&first=10
-#GET /api/v1/loans?pagination=cursor&first=10&after=eyJsYXN0X2lkIjogMTAwfQ==
 from datetime import datetime, timedelta, timezone
 from flask import Flask, request, jsonify, make_response, Blueprint, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_swagger_ui import get_swaggerui_blueprint
+from sqlalchemy.orm import selectinload
 import base64, json, re
 
 # -----------------------------
@@ -46,11 +43,6 @@ def require_fields(payload, fields):
     return None
 
 # ---------- Pagination strategies ----------
-# page-based:   ?pagination=page&page=1&per_page=10
-# offset-based: ?pagination=offset&offset=0&limit=10
-# cursor-based: ?pagination=cursor&first=10&after=<opaque_cursor>
-#
-# Cursor là chuỗi base64(json) chứa {"last_id": <int>} để đảm bảo opaque và ổn định
 def b64e(d: dict) -> str:
     return base64.urlsafe_b64encode(json.dumps(d).encode()).decode()
 
@@ -67,12 +59,6 @@ def parse_pagination_mode():
     return mode
 
 def paginate_sqlalchemy(query, model, default_per=10, max_per=100):
-    """
-    Trả về (items, meta, mode) theo chiến lược phân trang hiện tại.
-    - Page-based: dùng paginate() của SQLAlchemy
-    - Offset-based: dùng offset/limit raw
-    - Cursor-based: dùng id>last_id, order asc
-    """
     mode = parse_pagination_mode()
 
     if mode == "page":
@@ -90,7 +76,6 @@ def paginate_sqlalchemy(query, model, default_per=10, max_per=100):
             offset, limit = 0, default_per
         limit = max(1, min(limit, max_per))
         items = query.offset(max(0, offset)).limit(limit).all()
-        # Nếu muốn total: cần .count() (tốn kém trên bảng lớn)
         meta = {"pagination": "offset", "offset": max(0, offset), "limit": limit, "count": len(items)}
         return items, meta, mode
 
@@ -102,7 +87,6 @@ def paginate_sqlalchemy(query, model, default_per=10, max_per=100):
         data = b64d(after)
         last_id = int(data.get("last_id", 0))
 
-    # Cursor tăng dần theo id, đảm bảo ổn định và không trùng
     q2 = query.filter(getattr(model, "id") > last_id).order_by(getattr(model, "id").asc())
     items = q2.limit(first).all()
     next_cursor = None
@@ -149,8 +133,9 @@ class Loan(db.Model):
     due_at = db.Column(db.String, nullable=False)
     returned_at = db.Column(db.String, nullable=True)
 
-    book = db.relationship("Book")
-    member = db.relationship("Member")
+    # ✅ chống N+1 mặc định
+    book = db.relationship("Book", lazy="selectin")
+    member = db.relationship("Member", lazy="selectin")
 
 with app.app_context():
     db.create_all()
@@ -166,11 +151,10 @@ def health_check():
     return envelope(data={"service": "library-api", "time": utc_now_iso()}, cache_max_age=15)
 
 # -----------------------------
-# Books (resource) + resource tree: /books/{id}/loans, /books/{id}/borrowers
+# Books (resource) + resource tree
 # -----------------------------
 @api.get("/books")
 def list_books():
-    # search + sort
     q = request.args.get("q", "").strip()
     sort_field, sort_dir = parse_sort({"id", "title", "author", "stock", "created_at", "updated_at"}, "id", "desc")
     query = Book.query
@@ -188,7 +172,6 @@ def list_books():
         "created_at": b.created_at, "updated_at": b.updated_at
     } for b in items]
 
-    # Thêm hint query params vào meta (clarity)
     meta.update({"sort": sort_field, "order": sort_dir, "q": q or None})
     return envelope(data=data, meta=meta, cache_max_age=30)
 
@@ -265,16 +248,17 @@ def book_loans(book_id):
     elif status == "returned":
         q = q.filter(Loan.returned_at.isnot(None))
 
-    # sort + phân trang (ba chiến lược)
     sort_field, sort_dir = parse_sort({"id", "borrowed_at", "due_at", "returned_at"}, "id", "desc")
     sort_col = getattr(Loan, sort_field)
     sort_col = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
-    q = q.order_by(sort_col)
+
+    # ✅ eager-load member để tránh N+1
+    q = q.order_by(sort_col).options(selectinload(Loan.member))
 
     items, meta, mode = paginate_sqlalchemy(q, Loan)
     data = [{
         "id": l.id,
-        "book_id": l.book_id, "book_title": b.title,
+        "book_id": l.book_id, "book_title": b.title,  # dùng b.title (đã có) thay vì l.book.title
         "member_id": l.member_id, "member_name": l.member.name,
         "borrowed_at": l.borrowed_at, "due_at": l.due_at, "returned_at": l.returned_at
     } for l in items]
@@ -288,13 +272,10 @@ def book_borrowers(book_id):
     if not b:
         return envelope(status="error", error={"message": "Book not found"}, http_code=404)
 
-    # distinct members tham gia loan của book
     q = (db.session.query(Member)
          .join(Loan, Loan.member_id == Member.id)
          .filter(Loan.book_id == book_id)
          .distinct())
-
-    # sắp xếp theo id member
     q = q.order_by(Member.id.asc())
     items, meta, mode = paginate_sqlalchemy(q, Member)
     data = [{"id": m.id, "name": m.name, "email": m.email} for m in items]
@@ -302,7 +283,7 @@ def book_borrowers(book_id):
     return envelope(data=data, meta=meta)
 
 # -----------------------------
-# Members (resource) + resource tree: /members/{id}/loans
+# Members (resource) + resource tree
 # -----------------------------
 @api.get("/members")
 def list_members():
@@ -387,13 +368,12 @@ def delete_member(member_id):
 
 @api.get("/members/<int:member_id>/loans")
 def member_loans(member_id):
-    # resource tree: loans thuộc về 1 member
     status = request.args.get("status", "active")  # active|returned|all
     m = Member.query.get(member_id)
     if not m:
         return envelope(status="error", error={"message": "Member not found"}, http_code=404)
 
-    q = Loan.query.filter(Loan.member_id == member_id).join(Book)
+    q = Loan.query.filter(Loan.member_id == member_id)
     if status == "active":
         q = q.filter(Loan.returned_at.is_(None))
     elif status == "returned":
@@ -402,7 +382,9 @@ def member_loans(member_id):
     sort_field, sort_dir = parse_sort({"id", "borrowed_at", "due_at", "returned_at"}, "id", "desc")
     sort_col = getattr(Loan, sort_field)
     sort_col = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
-    q = q.order_by(sort_col)
+
+    # ✅ eager-load book để tránh N+1
+    q = q.order_by(sort_col).options(selectinload(Loan.book))
 
     items, meta, mode = paginate_sqlalchemy(q, Loan)
     data = [{
@@ -429,7 +411,9 @@ def list_loans():
     sort_field, sort_dir = parse_sort({"id", "borrowed_at", "due_at", "returned_at"}, "id", "desc")
     sort_col = getattr(Loan, sort_field)
     sort_col = sort_col.desc() if sort_dir == "desc" else sort_col.asc()
-    q = q.order_by(sort_col)
+
+    # ✅ eager-load cả book & member
+    q = q.order_by(sort_col).options(selectinload(Loan.book), selectinload(Loan.member))
 
     items, meta, mode = paginate_sqlalchemy(q, Loan)
     data = [{
@@ -491,7 +475,7 @@ def return_loan(loan_id):
     )
 
 # -----------------------------
-# OpenAPI & Docs (giữ nguyên đường dẫn)
+# OpenAPI & Docs
 # -----------------------------
 @app.get("/openapi.yaml")
 def openapi_yaml():
