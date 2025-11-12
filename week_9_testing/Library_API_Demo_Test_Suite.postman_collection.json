@@ -1,0 +1,473 @@
+{
+	"info": {
+		"_postman_id": "dc88e76a-7c2b-4d52-9018-220f01a17e54",
+		"name": "Library API – Demo Test Suite",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "37787915",
+		"_collection_link": "https://blue-rocket-54367.postman.co/workspace/My-Workspace~91b5b306-0064-4494-829b-e56a147c9c1b/collection/37787915-dc88e76a-7c2b-4d52-9018-220f01a17e54?action=share&source=collection_link&creator=37787915"
+	},
+	"item": [
+		{
+			"name": "Create member",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const now = new Date().toISOString().replace(/[:.Z-]/g, \"\");\r",
+							"pm.variables.set(\"dynamic_email\", `demo_${now}@example.com`);\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 201\", () => pm.expect(pm.response.code).to.eql(201));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\", \"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\");\r",
+							"  pm.expect(j).to.have.property(\"error\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Member fields ok\", () => {\r",
+							"  pm.expect(j.data).to.include.keys([\"id\",\"name\",\"email\",\"created_at\",\"updated_at\"]);\r",
+							"});\r",
+							"\r",
+							"// Lưu member_id để dùng cho Create Loan\r",
+							"pm.collectionVariables.set(\"member_id\", j.data.id);\r",
+							"pm.test(\"Saved member_id\", () => pm.expect(pm.collectionVariables.get(\"member_id\")).to.exist);\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"name\": \"Demo Member\",\r\n  \"email\": \"{{dynamic_email}}\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/members",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"members"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get all books",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 2xx\", () => pm.expect(pm.response.code).to.be.within(200,299));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\",\"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\").that.is.an(\"array\");\r",
+							"  pm.expect(j).to.have.property(\"meta\").that.is.an(\"object\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Page mode fields\", () => {\r",
+							"  pm.expect(j.meta).to.include.keys([\"pagination\",\"page\",\"per_page\",\"pages\",\"total\",\"order\",\"sort\"]);\r",
+							"  pm.expect(j.data.length).to.be.at.most(j.meta.per_page);\r",
+							"});\r",
+							"\r",
+							"if (j.data.length) {\r",
+							"  pm.test(\"Book fields\", () => {\r",
+							"    pm.expect(j.data[0]).to.include.keys([\"id\",\"title\",\"author\",\"stock\",\"created_at\",\"updated_at\"]);\r",
+							"  });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/books?page=1&per_page=5",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"books"
+					],
+					"query": [
+						{
+							"key": "page",
+							"value": "1"
+						},
+						{
+							"key": "per_page",
+							"value": "5"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Creat new book",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const now = new Date().toISOString().replace(/[:.Z-]/g,\"\");\r",
+							"pm.variables.set(\"dynamic_title\", `The Pragmatic Programmer #${now}`);\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 201\", () => pm.expect(pm.response.code).to.eql(201));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\",\"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\").that.is.an(\"object\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Book fields ok\", () => {\r",
+							"  pm.expect(j.data).to.include.keys([\"id\",\"title\",\"author\",\"stock\",\"created_at\",\"updated_at\"]);\r",
+							"});\r",
+							"\r",
+							"// Lưu ID và stock ban đầu để test giảm stock khi mượn\r",
+							"pm.collectionVariables.set(\"book_id\", j.data.id);\r",
+							"pm.collectionVariables.set(\"stock_before\", j.data.stock);\r",
+							"pm.test(\"Saved ids\", () => {\r",
+							"  pm.expect(pm.collectionVariables.get(\"book_id\")).to.exist;\r",
+							"  pm.expect(pm.collectionVariables.get(\"stock_before\")).to.exist;\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"title\": \"{{dynamic_title}}\",\r\n    \"author\": \"Andrew Hunt & David Thomas\",\r\n    \"stock\": \"3\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/books",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"books"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get member",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 2xx\", () => pm.expect(pm.response.code).to.be.within(200,299));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\",\"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\").that.is.an(\"array\");\r",
+							"  pm.expect(j).to.have.property(\"meta\").that.is.an(\"object\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Offset mode fields\", () => {\r",
+							"  pm.expect(j.meta).to.include.keys([\"pagination\",\"offset\",\"limit\",\"count\"]);\r",
+							"  pm.expect(j.meta.pagination).to.eql(\"offset\");\r",
+							"  pm.expect(j.data.length).to.be.at.most(j.meta.limit);\r",
+							"});\r",
+							"\r",
+							"if (j.data.length) {\r",
+							"  pm.test(\"Member minimal fields\", () => {\r",
+							"    pm.expect(j.data[0]).to.include.keys([\"id\",\"name\",\"email\",\"created_at\",\"updated_at\"]);\r",
+							"  });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/members?pagination=offset&offset=0&limit=5",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"members"
+					],
+					"query": [
+						{
+							"key": "pagination",
+							"value": "offset"
+						},
+						{
+							"key": "offset",
+							"value": "0"
+						},
+						{
+							"key": "limit",
+							"value": "5"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create loan",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 201\", () => pm.expect(pm.response.code).to.eql(201));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\",\"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\").that.is.an(\"object\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Loan fields ok (returned_at null trước khi trả)\", () => {\r",
+							"  pm.expect(j.data).to.include.keys([\"id\",\"book_id\",\"member_id\",\"borrowed_at\",\"due_at\"]);\r",
+							"  pm.expect(j.data).to.have.property(\"returned_at\");         // field tồn tại\r",
+							"  pm.expect(j.data.returned_at === null).to.eql(true);       // giá trị null khi mới mượn\r",
+							"});\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"book_id\": {{book_id}},\r\n    \"member_id\": {{member_id}},\r\n    \"days\": 7\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/loans",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"loans"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get loan",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status 2xx\", () => pm.expect(pm.response.code).to.be.within(200,299));\r",
+							"pm.test(\"JSON\", () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));\r",
+							"pm.test(\"RT < 800ms\", () => pm.expect(pm.response.responseTime).to.be.below(800));\r",
+							"\r",
+							"const j = pm.response.json();\r",
+							"\r",
+							"pm.test(\"Envelope ok\", () => {\r",
+							"  pm.expect(j).to.have.property(\"status\",\"success\");\r",
+							"  pm.expect(j).to.have.property(\"data\").that.is.an(\"array\");\r",
+							"  pm.expect(j).to.have.property(\"meta\").that.is.an(\"object\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Cursor meta ok\", () => {\r",
+							"  pm.expect(j.meta).to.include.keys([\"pagination\",\"first\",\"count\"]);\r",
+							"  pm.expect(j.meta.pagination).to.eql(\"cursor\");\r",
+							"});\r",
+							"\r",
+							"if (j.data.length) {\r",
+							"  pm.test(\"Loan item fields\", () => {\r",
+							"    pm.expect(j.data[0]).to.include.keys([\"id\",\"book_id\",\"book_title\",\"member_id\",\"member_name\",\"borrowed_at\",\"due_at\"]);\r",
+							"    // returned_at có thể null nếu chưa trả\r",
+							"  });\r",
+							"}\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/v1/loans?pagination=cursor&first=10",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"v1",
+						"loans"
+					],
+					"query": [
+						{
+							"key": "pagination",
+							"value": "cursor"
+						},
+						{
+							"key": "first",
+							"value": "10"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": ""
+		},
+		{
+			"key": "member_id",
+			"value": ""
+		},
+		{
+			"key": "book_id",
+			"value": ""
+		},
+		{
+			"key": "stock_before",
+			"value": ""
+		},
+		{
+			"key": "stock_after_loan",
+			"value": ""
+		},
+		{
+			"key": "loan_id",
+			"value": ""
+		}
+	]
+}

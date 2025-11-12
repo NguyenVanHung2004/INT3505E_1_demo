@@ -1,0 +1,1 @@
+npx newman run ".\Library_API_Demo_Test_Suite.postman_collection.json" `   -e ".\Library_API_Local.postman_environment.json" `   -r cli,htmlextra `  --reporter-htmlextra-export ".\newman-report.html"
